@@ -13,8 +13,8 @@ type Message = {
   kind: "explain" | "test" | "run";
   title: string;
   body: string;
-  pendingInputs?: string[]; // variable names awaiting test values
-  codeSnippet?: string; // The specific code block being tested
+  blockCode?: string; // original selected block (for test messages, used to re-run)
+  pendingInputs?: string[];
 };
 
 type Props = {
@@ -74,22 +74,26 @@ export function AssistantPanel({ language, selection, fullCode, onRunBlock }: Pr
 
   async function handleTest() {
     if (!selection) return;
+    const blockCode = selection.text;
     setLoading(true);
     try {
-      const text = await callAi({ mode: "test", code: selection.text });
+      const text = await callAi({ mode: "test", code: blockCode });
       const inputs = extractInputVars(text);
       const id = pushMessage({
         kind: "test",
         title: `Test block (lines ${selection.startLine}–${selection.endLine})`,
         body: text,
+        blockCode,
         pendingInputs: inputs,
-        codeSnippet: selection.text,
       });
       if (inputs.length > 0) {
         setTestCases((tc) => ({
           ...tc,
           [id]: Object.fromEntries(inputs.map((v) => [v, ""])),
         }));
+      } else {
+        // No inputs needed — run immediately
+        await runBlockNow(blockCode, {});
       }
     } catch (e) {
       pushMessage({ kind: "test", title: "Error", body: errMsg(e) });
@@ -98,14 +102,27 @@ export function AssistantPanel({ language, selection, fullCode, onRunBlock }: Pr
     }
   }
 
+  async function runBlockNow(blockCode: string, inputs: Record<string, string>) {
+    const result = await onRunBlock(blockCode, inputs);
+    const body =
+      ((result.stdout ? `**Output:**\n\`\`\`\n${result.stdout}\n\`\`\`\n\n` : "") +
+        (result.stderr ? `**Error:**\n\`\`\`\n${result.stderr}\n\`\`\`` : "")) ||
+      "_(no output)_";
+    pushMessage({
+      kind: "run",
+      title: result.ok ? "✓ Block ran successfully" : "✗ Block errored",
+      body,
+    });
+  }
+
   async function handleRunWithInputs(msg: Message) {
+    if (!msg.blockCode) return;
     const inputs = testCases[msg.id] ?? {};
-    const codeToRun = msg.codeSnippet ?? "";
     setLoading(true);
     try {
       const analysis = await callAi({
         mode: "test",
-        code: codeToRun,
+        code: msg.blockCode,
         testCases: inputs,
       });
       pushMessage({
@@ -113,16 +130,7 @@ export function AssistantPanel({ language, selection, fullCode, onRunBlock }: Pr
         title: "AI analysis with your test values",
         body: analysis,
       });
-      const result = await onRunBlock(codeToRun, inputs);
-      const body =
-        (result.stdout ? `**Output:**\n\`\`\`\n${result.stdout}\n\`\`\`\n\n` : "") +
-        (result.stderr ? `**Error:**\n\`\`\`\n${result.stderr}\n\`\`\`` : "") ||
-        "_(no output)_";
-      pushMessage({
-        kind: "run",
-        title: result.ok ? "✓ Block ran successfully" : "✗ Block errored",
-        body,
-      });
+      await runBlockNow(msg.blockCode, inputs);
     } catch (e) {
       pushMessage({ kind: "run", title: "Error", body: errMsg(e) });
     } finally {
@@ -160,11 +168,7 @@ export function AssistantPanel({ language, selection, fullCode, onRunBlock }: Pr
         >
           Explain line
         </Button>
-        <Button
-          size="sm"
-          disabled={!canAct}
-          onClick={handleTest}
-        >
+        <Button size="sm" disabled={!canAct} onClick={handleTest}>
           Test block
         </Button>
         {loading && <Loader2 className="ml-auto h-4 w-4 animate-spin text-amber-400" />}
@@ -175,24 +179,23 @@ export function AssistantPanel({ language, selection, fullCode, onRunBlock }: Pr
           <div className="rounded-md border border-dashed border-zinc-700 p-4 text-sm text-zinc-400">
             <p className="font-medium text-zinc-300">How to use</p>
             <ul className="mt-2 list-disc space-y-1 pl-5 text-xs">
-              <li>Select a single line and click <strong>Explain line</strong></li>
-              <li>Select a block of code and click <strong>Test block</strong></li>
-              <li>Fill in any test values the AI requests, then run</li>
+              <li>
+                Select a single line → <strong>Explain line</strong>
+              </li>
+              <li>
+                Select a block of code → <strong>Test block</strong>
+              </li>
+              <li>Provide test values for any inputs, then run</li>
             </ul>
           </div>
         )}
 
         {messages.map((m) => (
-          <div
-            key={m.id}
-            className="rounded-md border border-zinc-800 bg-zinc-950/60 p-3"
-          >
+          <div key={m.id} className="rounded-md border border-zinc-800 bg-zinc-950/60 p-3">
             <div className="mb-2 flex items-center justify-between text-xs font-medium uppercase tracking-wide text-zinc-400">
               <span>{m.title}</span>
               <button
-                onClick={() =>
-                  setMessages((p) => p.filter((x) => x.id !== m.id))
-                }
+                onClick={() => setMessages((p) => p.filter((x) => x.id !== m.id))}
                 className="text-zinc-500 hover:text-zinc-200"
                 aria-label="Dismiss"
               >
@@ -248,10 +251,11 @@ function errMsg(e: unknown) {
 
 function extractInputVars(md: string): string[] {
   const names = new Set<string>();
+  const idx = md.toLowerCase().indexOf("inputs needed");
+  if (idx < 0) return [];
+  const slice = md.slice(idx);
   const re = /^\s*[-*]\s+`?([A-Za-z_][A-Za-z0-9_]*)`?/gm;
   let m: RegExpExecArray | null;
-  const idx = md.toLowerCase().indexOf("inputs needed");
-  const slice = idx >= 0 ? md.slice(idx) : md;
   while ((m = re.exec(slice)) !== null) {
     names.add(m[1]);
   }
