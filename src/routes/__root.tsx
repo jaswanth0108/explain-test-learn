@@ -72,14 +72,18 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
+      { title: "Codetutor" },
+      { name: "description", content: "Code Companion is an AI assistant that explains, analyzes, and tests code for students using multi-language compilers." },
       { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { property: "og:title", content: "Codetutor" },
+      { property: "og:description", content: "Code Companion is an AI assistant that explains, analyzes, and tests code for students using multi-language compilers." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:title", content: "Codetutor" },
+      { name: "twitter:description", content: "Code Companion is an AI assistant that explains, analyzes, and tests code for students using multi-language compilers." },
+      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/ONTvtggrpqcVetpIRMFJgJJNDbA3/social-images/social-1779096123913-WhatsApp_Image_2025-10-09_at_18.03.19_8489c63d.webp" },
+      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/ONTvtggrpqcVetpIRMFJgJJNDbA3/social-images/social-1779096123913-WhatsApp_Image_2025-10-09_at_18.03.19_8489c63d.webp" },
     ],
     links: [
       {
